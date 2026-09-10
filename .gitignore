@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+profile_*/
+_captcha.png
+_cap.png
+_debug*.png
