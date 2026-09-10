@@ -1,0 +1,51 @@
+name: APK.TW Check-in
+
+on:
+  workflow_dispatch:   # manual trigger for testing
+
+env:
+  TZ: "Asia/Taipei"
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps (tesseract for OCR fallback)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev
+          tesseract --version | head -1
+
+      - name: Install Python deps
+        run: |
+          pip install -r requirements.txt
+          python -c "import playwright, ddddocr, PIL; print('deps OK')"
+
+      - name: Install Chrome + playwright chromium (fallback)
+        run: |
+          sudo apt-get install -y google-chrome-stable || true
+          python -m playwright install chromium --with-deps || true
+          which google-chrome || echo "chrome not found (falling back to chromium)"
+
+      - name: Run check-in
+        env:
+          APK_USER_1: ${{ secrets.APK_USER_1 }}
+          APK_PASS_1: ${{ secrets.APK_PASS_1 }}
+          APK_USER_2: ${{ secrets.APK_USER_2 }}
+          APK_PASS_2: ${{ secrets.APK_PASS_2 }}
+          APK_SILENT: "1"
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: |
+          chmod +x run.sh
+          ./run.sh
+          echo "exit=$?"

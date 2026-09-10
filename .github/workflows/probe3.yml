@@ -1,0 +1,13 @@
+name: probe3
+
+on:
+  workflow_dispatch:
+
+env:
+  TZ: "Asia/Taipei"
+
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo p3

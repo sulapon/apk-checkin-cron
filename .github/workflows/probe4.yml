@@ -1,0 +1,13 @@
+name: probe4
+
+on:
+  workflow_dispatch:
+
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - name: s
+        env:
+          APK_USER_1: ${{ secrets.APK_USER_1 }}
+        run: echo p4
