@@ -31,6 +31,26 @@ SILENT = os.environ.get("APK_SILENT", "1") == "1"
 SESSION_DIR = Path(__file__).resolve().parent / ".session"
 
 
+def _today() -> str:
+    return time.strftime("%Y-%m-%d")
+
+
+def _done_flag(idx: int, date: str) -> Path:
+    return SESSION_DIR / f"signed_{date}_{idx}.flag"
+
+
+def already_signed_today(idx: int, date: str) -> bool:
+    return _done_flag(idx, date).exists()
+
+
+def mark_signed_today(idx: int, date: str) -> None:
+    try:
+        SESSION_DIR.mkdir(exist_ok=True)
+        _done_flag(idx, date).write_text(date, encoding="utf-8")
+    except Exception as exc:
+        log(f"account{idx}: mark signed failed: {exc}")
+
+
 def load_cookies(idx: int) -> list:
     """Load persisted apk.tw cookies: cache file first, then Secrets bootstrap."""
     f = SESSION_DIR / f"cookies_{idx}.json"
@@ -217,6 +237,12 @@ def run_account(pw, idx: int) -> dict:
         return {"account": f"account{idx}", "date": time.strftime("%Y-%m-%d"),
                 "ok": True, "login": "skipped (no credentials)", "action": "skip"}
     result = {"account": uname, "date": time.strftime("%Y-%m-%d")}
+    if already_signed_today(idx, result["date"]):
+        result["ok"] = True
+        result["action"] = "skip"
+        result["checkin"] = "already signed today (notified), skip"
+        log(f"account{idx}: already signed {result['date']}, skip")
+        return result
     launch_kwargs = dict(headless=True,
                          args=["--no-sandbox", "--disable-dev-shm-usage"])
     if os.environ.get("APK_NO_CHROME") == "1" or not _chrome_present():
@@ -264,6 +290,14 @@ def main() -> int:
     all_ok = True
     any_signed = False
     any_failed = False
+    # Drop stale day-flags so a new day starts clean (flags persist via cache).
+    try:
+        SESSION_DIR.mkdir(exist_ok=True)
+        for f in SESSION_DIR.glob("signed_*.flag"):
+            if _today() not in f.name:
+                f.unlink()
+    except Exception as exc:
+        log(f"cleanup old flags failed: {exc}")
     with sync_playwright() as pw:
         for idx in (1, 2):
             try:
@@ -273,6 +307,9 @@ def main() -> int:
                 result = {"account": f"account{idx}", "date": time.strftime("%Y-%m-%d"),
                           "ok": False, "error": str(exc)[:200], "action": "crash"}
             all_ok &= bool(result.get("ok"))
+            if bool(result.get("ok")) and result.get("action") in ("signed", "skip") \
+                    and result.get("login") != "skipped (no credentials)":
+                mark_signed_today(idx, result.get("date") or _today())
             if result.get("action") == "signed":
                 any_signed = True
             if not result.get("ok"):
