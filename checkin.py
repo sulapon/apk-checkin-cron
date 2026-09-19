@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from PIL import Image
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
