@@ -39,12 +39,22 @@ jobs:
           python -m playwright install chromium --with-deps || true
           which google-chrome || echo "chrome not found (falling back to chromium)"
 
+      - name: Restore session cookies (cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: .session
+          # Runner-local session refresh; secrets remain the bootstrap source.
+          key: apk-session-${{ github.run_id }}
+          restore-keys: apk-session-
+
       - name: Run check-in
         env:
           APK_USER_1: ${{ secrets.APK_USER_1 }}
           APK_PASS_1: ${{ secrets.APK_PASS_1 }}
           APK_USER_2: ${{ secrets.APK_USER_2 }}
           APK_PASS_2: ${{ secrets.APK_PASS_2 }}
+          APK_COOKIES_1: ${{ secrets.APK_COOKIES_1 }}
+          APK_COOKIES_2: ${{ secrets.APK_COOKIES_2 }}
           APK_SILENT: "1"
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
@@ -52,3 +62,10 @@ jobs:
           chmod +x run.sh
           ./run.sh
           echo "exit=$?"
+
+      - name: Save session cookies (cache)
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .session
+          key: apk-session-${{ github.run_id }}

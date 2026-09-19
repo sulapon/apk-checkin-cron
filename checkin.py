@@ -27,6 +27,47 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 BASE = "https://apk.tw"
 MAX_ATTEMPTS = 20
 SILENT = os.environ.get("APK_SILENT", "1") == "1"
+SESSION_DIR = Path(__file__).resolve().parent / ".session"
+
+
+def load_cookies(idx: int) -> list:
+    """Load persisted apk.tw cookies: cache file first, then Secrets bootstrap."""
+    f = SESSION_DIR / f"cookies_{idx}.json"
+    if f.exists():
+        try:
+            data = json.loads(f.read_text())
+            if isinstance(data, list) and data:
+                log(f"account{idx}: loaded {len(data)} cookies from cache file")
+                return data
+        except Exception as exc:
+            log(f"account{idx}: cache file unreadable: {exc}")
+    raw = os.environ.get(f"APK_COOKIES_{idx}", "")
+    if raw:
+        try:
+            import base64
+            try:
+                data = json.loads(base64.b64decode(raw).decode())
+            except Exception:
+                data = json.loads(raw)
+            if isinstance(data, list) and data:
+                log(f"account{idx}: loaded {len(data)} cookies from secrets")
+                return data
+        except Exception as exc:
+            log(f"account{idx}: secrets cookies unreadable: {exc}")
+    return []
+
+
+def save_cookies(context, idx: int) -> None:
+    try:
+        SESSION_DIR.mkdir(exist_ok=True)
+        all_ck = context.cookies("https://apk.tw")
+        apk = [c for c in all_ck if "apk.tw" in c.get("domain", "")]
+        if apk:
+            (SESSION_DIR / f"cookies_{idx}.json").write_text(
+                json.dumps(apk), encoding="utf-8")
+            log(f"account{idx}: saved {len(apk)} cookies to cache file")
+    except Exception as exc:
+        log(f"account{idx}: save cookies failed: {exc}")
 
 
 def log(msg: str) -> None:
@@ -99,6 +140,13 @@ def do_login(page, username: str, password: str) -> tuple[bool, str]:
             cb.check()
         page.wait_for_timeout(1200)   # captcha loads lazily after focus
 
+        # Site migrated (mid-Sep 2026) from image seccode to Cloudflare Turnstile:
+        # no <img seccode> is rendered anymore. Detect it and fail fast with a
+        # clear message instead of 20 blind retries.
+        if page.locator('.cf_turnstile_box, iframe[src*="challenges.cloudflare.com"]').count() > 0:
+            return False, ("turnstile-blocked: site now uses Cloudflare Turnstile, "
+                           "fresh password login cannot pass headlessly; "
+                           "restore a valid session cookie instead")
         cap = page.locator('img[src*="seccode"], img[id*="seccode"]').first
         if cap.count() == 0:
             log("no captcha shown - submitting directly")
@@ -175,7 +223,14 @@ def run_account(pw, idx: int) -> dict:
     else:
         launch_kwargs["channel"] = "chrome"
     ctx = pw.chromium.launch(**launch_kwargs)
-    page = ctx.new_page()
+    context = ctx.new_context()
+    seeded = load_cookies(idx)
+    if seeded:
+        try:
+            context.add_cookies(seeded)
+        except Exception as exc:
+            log(f"account{idx}: add_cookies failed: {exc}")
+    page = context.new_page()
     try:
         page.goto(BASE, wait_until="domcontentloaded", timeout=60000)
         if not is_logged_in(page):
@@ -185,8 +240,10 @@ def run_account(pw, idx: int) -> dict:
                 result["ok"] = False
                 result["action"] = "login-failed"
                 return result
+            save_cookies(context, idx)
         else:
-            result["login"] = "session alive"
+            result["login"] = "session alive (cookie restore)"
+            save_cookies(context, idx)
         state = checkin_state(page)
         if state == "done":
             result["checkin"] = "already checked in"

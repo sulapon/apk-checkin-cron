@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 profile_*/
+.session/
 _captcha.png
 _cap.png
 _debug*.png
