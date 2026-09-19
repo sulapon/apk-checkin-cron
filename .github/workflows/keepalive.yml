@@ -1,0 +1,26 @@
+name: Keepalive (prevent schedule disable)
+
+on:
+  schedule:
+    # Weekly: GitHub disables scheduled workflows after 60 days without
+    # any commit. One empty commit per week keeps the check-in alive.
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Empty commit and push
+        run: |
+          git config user.name "apk-keepalive"
+          git config user.email "apk-keepalive@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive: prevent schedule disable"
+          git push
