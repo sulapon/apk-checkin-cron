@@ -237,12 +237,9 @@ def run_account(pw, idx: int) -> dict:
         return {"account": f"account{idx}", "date": time.strftime("%Y-%m-%d"),
                 "ok": True, "login": "skipped (no credentials)", "action": "skip"}
     result = {"account": uname, "date": time.strftime("%Y-%m-%d")}
-    if already_signed_today(idx, result["date"]):
-        result["ok"] = True
-        result["action"] = "skip"
-        result["checkin"] = "already signed today (notified), skip"
-        log(f"account{idx}: already signed {result['date']}, skip")
-        return result
+    warmed = already_signed_today(idx, result["date"])
+    if warmed:
+        log(f"account{idx}: already signed {result['date']}, warm-only (no checkin)")
     launch_kwargs = dict(headless=True,
                          args=["--no-sandbox", "--disable-dev-shm-usage"])
     if os.environ.get("APK_NO_CHROME") == "1" or not _chrome_present():
@@ -266,11 +263,23 @@ def run_account(pw, idx: int) -> dict:
             if not ok:
                 result["ok"] = False
                 result["action"] = "login-failed"
+                # poison-cache self-heal: drop dead cache cookies so the next
+                # run falls back to Secrets bootstrap instead of looping on them
+                try:
+                    (SESSION_DIR / f"cookies_{idx}.json").unlink(missing_ok=True)
+                    log(f"account{idx}: dropped dead cache cookies")
+                except Exception as exc:
+                    log(f"account{idx}: drop dead cache failed: {exc}")
                 return result
             save_cookies(context, idx)
         else:
             result["login"] = "session alive (cookie restore)"
             save_cookies(context, idx)
+        if warmed:
+            result["checkin"] = "already signed today, session warmed"
+            result["action"] = "skip"
+            result["ok"] = True
+            return result
         state = checkin_state(page)
         if state == "done":
             result["checkin"] = "already checked in"
