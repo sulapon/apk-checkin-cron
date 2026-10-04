@@ -69,3 +69,23 @@ jobs:
         with:
           path: .session
           key: apk-session-${{ github.run_id }}
+
+      - name: Rotate cookie secrets (keep bootstrap fresh)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.ROTATE_PAT }}
+        run: |
+          for N in 1 2; do
+            F=".session/cookies_${N}.json"
+            if [ -s "$F" ]; then
+              B64=$(base64 -w0 "$F")
+              if [ "${#B64}" -lt 40000 ]; then
+                echo "$B64" | gh secret set "APK_COOKIES_${N}" --repo "$GITHUB_REPOSITORY"
+                echo "rotated APK_COOKIES_${N} (${#B64} chars)"
+              else
+                echo "skip APK_COOKIES_${N}: too large (${#B64})"
+              fi
+            else
+              echo "skip APK_COOKIES_${N}: no fresh cookies this run"
+            fi
+          done
