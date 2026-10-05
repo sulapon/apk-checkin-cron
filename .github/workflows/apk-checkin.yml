@@ -2,8 +2,13 @@ name: APK.TW Check-in
 
 on:
   schedule:
-    # Every hour (GitHub cron is UTC; TZ env aligns the check-in day)
-    - cron: "0 * * * *"
+    # Backup path only: the authoritative runner is the local systemd timer
+    # (~/apk-checkin, hourly at :20). GitHub cron is best-effort and skipped
+    # whole hours in 2026-10, so it fires every 4h as a safety net for when the
+    # desktop is off/asleep. Check-in is idempotent — a repeat run just returns
+    # "already checked in" and never double-awards.
+    # :30 past the hour, deliberately off the crowded :00 stamp.
+    - cron: "30 */4 * * *"   # UTC -> Taipei 08:30/12:30/16:30/20:30/00:30/04:30
   workflow_dispatch:   # manual trigger for testing
 
 env:
