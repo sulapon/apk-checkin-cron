@@ -84,7 +84,12 @@ jobs:
             F=".session/cookies_${N}.json"
             if [ -s "$F" ]; then
               B64=$(base64 -w0 "$F")
-              if [ "${#B64}" -lt 40000 ]; then
+              # Guard: never overwrite secrets with empty/truncated cookies
+              # (2026-10-17 incident: secrets were clobbered with 1-char values).
+              if [ "${#B64}" -lt 3000 ]; then
+                echo "skip APK_COOKIES_${N}: too small (${#B64} chars) — refusing to clobber"
+              elif [ "${#B64}" -gt 40000 ]; then
+                echo "skip APK_COOKIES_${N}: too large (${#B64})"
                 echo "$B64" | gh secret set "APK_COOKIES_${N}" --repo "$GITHUB_REPOSITORY"
                 echo "rotated APK_COOKIES_${N} (${#B64} chars)"
               else
