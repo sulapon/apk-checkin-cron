@@ -20,14 +20,17 @@ jobs:
           mkdir -p export
           for i in 1 2; do
             v="$APK_COOKIES_$i"
+            echo "secret $i: len=${#v} head=${v:0:40}..."
             if [ -n "$v" ]; then
               # secrets may be base64 of JSON, or raw JSON
-              if echo "$v" | base64 -d 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+              if echo "$v" | base64 -d 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d,list)" 2>/dev/null; then
                 echo "$v" | base64 -d > export/cookies_$i.json
+                src=b64
               else
                 echo "$v" > export/cookies_$i.json
+                src=raw
               fi
-              python3 -c "import json; print('cookies_$i ok,', len(json.load(open('export/cookies_$i.json'))), 'cookies')"
+              python3 -c "import json; d=json.load(open('export/cookies_$i.json')); print('cookies_$i (', \"$src\", '): type', type(d).__name__, 'len', len(d) if hasattr(d,'__len__') else d)"
             fi
             echo "$APK_USER_$i|$APK_PASS_$i" > export/creds_$i.txt
           done
